@@ -14,7 +14,7 @@ import subprocess
 import sys
 import argparse
 
-PORT = 8000
+PORT = os.environ.get("PORT", "8000")
 SLIDES_DIR = "slides"
 Handler = http.server.SimpleHTTPRequestHandler
 
@@ -41,7 +41,7 @@ def check_tools():
 
 
 def serve_content():
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    with socketserver.TCPServer(("", int(PORT)), Handler) as httpd:
         print("serving at http://localhost:{}".format(PORT))
         httpd.serve_forever()
 

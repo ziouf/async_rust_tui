@@ -1,3 +1,6 @@
+.devcontainer/.gitconfig
+.venv/
 .env
 target
 /slides/async_rust_tui.html
+nohup.out
