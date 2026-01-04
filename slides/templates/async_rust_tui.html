@@ -1058,9 +1058,76 @@
         </section>
 
         <section>
+          <h3>Part 3 — HTTP client with reqwest</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                <strong>reqwest</strong> is the
+                <strong>go-to HTTP client</strong> in the Rust ecosystem
+                <ul>
+                  <li>widely used and battle-tested,</li>
+                  <li>built on top of <code>hyper</code>,</li>
+                  <li>well integrated with async Rust.</li>
+                </ul>
+              </li>
+
+              <li>
+                Supports both <strong>async</strong> and
+                <strong>blocking</strong> APIs:
+                <ul>
+                  <li>
+                    <code>reqwest::Client</code> — async (used in this
+                    workshop),
+                  </li>
+                  <li>
+                    <code>reqwest::blocking::Client</code> — sync, for simple
+                    tools.
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                In our case:
+                <ul>
+                  <li>
+                    used inside the <code>ReqwestClient</code> implementation,
+                  </li>
+                  <li>configured with a custom <strong>User-Agent</strong>,</li>
+                  <li>handles authentication and JSON deserialization.</li>
+                </ul>
+              </li>
+
+              <li>
+                Why it fits well here:
+                <ul>
+                  <li>non-blocking HTTP calls,</li>
+                  <li>works naturally with Tokio,</li>
+                  <li>easy to replace thanks to dependency inversion.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
           <h3>Part 3 — What changed (and how to test)</h3>
           <div class="lots_of_items2">
             <ul>
+              <li>
+                <strong>What we need to implement</strong>:
+                <ul>
+                  <li>
+                    <code>fetch_journeys()</code> — call the API, parse zoned
+                    datetimes, compute durations, and map results to the domain
+                    model
+                  </li>
+                  <li>
+                    <code>ReqwestClient</code> — the real HTTP implementation of
+                    the client trait
+                  </li>
+                </ul>
+              </li>
+
               <li>
                 Most of the changes are located in the
                 <strong><code>sncf</code> crate</strong>.
@@ -1102,6 +1169,7 @@
             </ul>
           </div>
         </section>
+
         <section>
           <h3>Introduction to Bevy Scheduler</h3>
           <div class="lots_of_items">
