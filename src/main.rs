@@ -1,6 +1,6 @@
 use std::env;
 
-use async_rust_tui::{APPNAME, api_check, run};
+use async_rust_tui::{APPNAME, exit_gui, run, start_gui};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -24,9 +24,14 @@ async fn main() -> anyhow::Result<()> {
 
     let _ = dotenvy::dotenv();
     let api_key = env::var("SNCF_API_KEY")?;
-    api_check(api_key.clone())?;
-    run(api_key).await?;
 
+    // Setup terminal
+    let mut terminal = start_gui()?;
+
+    let res = run(&mut terminal, api_key).await;
+
+    // Restore terminal
+    exit_gui(terminal)?;
     tracing::info!("Application ending");
-    Ok(())
+    res
 }

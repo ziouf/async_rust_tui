@@ -1,67 +1,92 @@
-use anyhow::bail;
-// use sncf::{Call, call_me, call_me_twice};
-use tokio::sync::mpsc::{self, error};
+mod app;
+mod events;
+mod ui;
+
+use crate::app::{App, Mode};
+use crate::events::{QuitApp, handle_keys};
+use crossterm::event::Event;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+};
+use crossterm::{ExecutableCommand, event};
+use ratatui::{Terminal, prelude::CrosstermBackend};
+use std::{
+    io::{self, Write, stdout},
+    time::Duration,
+};
+use tokio::sync::mpsc::error;
+use tokio::time::Instant;
 
 pub const APPNAME: &str = env!("CARGO_PKG_NAME");
 
 #[allow(unused)]
-pub async fn run(_api_key: String) -> anyhow::Result<()> {
-    let mut count = 0;
-    let mut msg = String::new();
-    let (data_sender, mut data_receiver) = mpsc::channel::<String>(5);
-
-    // Spawn a task here that will send data from the API.
-    let refresh_task = tokio::spawn(async move {
-        tracing::info!("refresh task started");
-
-        loop {
-            tracing::info!("sending data");
-            if count == 5 {
-                msg = "stop".to_string()
-            } else {
-                msg = format!("Hello {count}");
-            }
-            if let Err(e) = data_sender.send(msg).await {
-                tracing::error!("Error sending message: {e}");
-                break;
-            }
-            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-            count += 1;
-        }
-
-        tracing::error!("refresh task terminated");
-    });
+pub async fn run(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    api_key: String,
+) -> anyhow::Result<()> {
+    let mut app = App::new(api_key)?;
+    // We start the external task here if we have a config defined.
+    app.start_refresh_task();
 
     // Following loop simulate the TUI main loop.
+    let tick_rate = Duration::from_millis(120);
+    let mut last_tick = Instant::now();
     loop {
         // Check that the external task is running, if not return an error.
-        if refresh_task.is_finished() {
-            return refresh_task_result_to_err(refresh_task.await);
+        if let Some(handle) = app.refresh_task.as_mut()
+            && handle.is_finished()
+        {
+            let handle = app.refresh_task.take().expect("refresh_task should exist");
+            return refresh_task_result_to_err(handle.await);
         }
 
         // Manage message from refresh task
-        match data_receiver.try_recv() {
-            Err(error::TryRecvError::Empty) => {}
-            Err(error::TryRecvError::Disconnected) => {}
-            Ok(data) => {
-                tracing::info!("data received");
-                tracing::debug!("Data: {data}");
-                // For testing purpose, we send a stop message after 5 iterations to go out of the
-                // loop.
-                if data == "stop" {
-                    break;
+        if let Some(receiver) = app.data_receiver.as_mut() {
+            match receiver.try_recv() {
+                Err(error::TryRecvError::Empty) => {}
+                Err(error::TryRecvError::Disconnected) => {}
+                Ok(data) => {
+                    tracing::info!("data received");
+                    tracing::debug!("Data: {data}");
                 }
+            };
+        }
+
+        terminal.draw(|f| match app.mode {
+            Mode::InputStart | Mode::InputDest => ui::draw_input(f, &app),
+        })?;
+
+        match app.mode {
+            Mode::InputStart | Mode::InputDest => {
+                app.maybe_fetch_suggestions().await;
             }
-        };
+        }
+
+        // // tick for a short wait and handle key input
+        // let _ = tick.tick().await;
+        // if event::poll(Duration::from_millis(0))?
+        //     && let Event::Key(key) = event::read()?
+        //     && let Some(value) = handle_keys(&mut app, key).await
+        // {
+        //     return value;
+        // }
+
+        // Handle input events
+        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
+        if event::poll(timeout)?
+            && let Event::Key(key) = event::read()?
+        {
+            let exit = handle_keys(&mut app, key).await?;
+            if exit == QuitApp::Yes {
+                break;
+            }
+        }
+
+        if last_tick.elapsed() >= tick_rate {
+            last_tick = Instant::now();
+        }
     }
     Ok(())
-}
-
-pub fn api_check(api: String) -> anyhow::Result<()> {
-    match api.as_str() {
-        "change_me" => Ok(()),
-        _ => bail!("Wrong api key"),
-    }
 }
 
 fn refresh_task_result_to_err(res: Result<(), tokio::task::JoinError>) -> anyhow::Result<()> {
@@ -81,6 +106,24 @@ fn refresh_task_result_to_err(res: Result<(), tokio::task::JoinError>) -> anyhow
     }
 }
 
+pub fn exit_gui(
+    mut terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
+) -> Result<(), anyhow::Error> {
+    disable_raw_mode()?;
+    ExecutableCommand::execute(&mut stdout(), LeaveAlternateScreen)?;
+    stdout().flush()?;
+    terminal.show_cursor()?;
+    Ok(())
+}
+
+pub fn start_gui() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, anyhow::Error> {
+    ExecutableCommand::execute(&mut stdout(), EnterAlternateScreen)?;
+    enable_raw_mode()?;
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    terminal.hide_cursor()?;
+    Ok(terminal)
+}
+
 #[cfg(test)]
 mod tests {
     use sncf::client::ReqwestClient;
@@ -97,21 +140,6 @@ mod tests {
     #[should_panic(expected = "Houston, we have a problem !")]
     fn fake_panic() {
         panic!("Houston, we have a problem !");
-    }
-
-    #[test]
-    fn api_check_accepts_expected_key() {
-        let result = api_check("change_me".to_string());
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn api_check_rejects_other_keys() {
-        let result = api_check("nope".to_string());
-
-        let err = result.expect_err("expected api_check to fail for invalid key");
-        assert_eq!(err.to_string(), "Wrong api key");
     }
 
     #[tokio::test]
@@ -133,12 +161,6 @@ mod tests {
             err.to_string().contains("💥 refresh task panicked:"),
             "unexpected error: {err}"
         );
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn run_returns_ok_after_stop_message() {
-        let result = run("change_me".to_string()).await;
-        assert!(result.is_ok());
     }
 
     #[tokio::test]
