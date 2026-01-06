@@ -40,7 +40,7 @@ pub struct App {
     pub client: ReqwestClient,
     pub api_key: String,
     pub refresh_task: Option<JoinHandle<()>>,
-    pub data_receiver: Option<mpsc::Receiver<String>>,
+    pub data_receiver: mpsc::Receiver<String>,
     pub chosen_start: Option<Place>,
     pub chosen_dest: Option<Place>,
     pub config: Option<AppConfig>,

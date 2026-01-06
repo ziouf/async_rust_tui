@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 pub fn draw_input(f: &mut ratatui::Frame, app: &App) {
     let area = f.area();
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
+        .direction(Direction::Horizontal)
         .constraints([Constraint::Length(3), Constraint::Min(3)])
         .split(centered_rect(80, 70, area));
 

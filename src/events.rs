@@ -49,7 +49,7 @@ pub fn handle_station_keys(
                                     name: dest.name,
                                 },
                             };
-                            let _ = save_config(&conf);
+                            // Something is missing....
                             app.config = Some(conf);
                             return Ok(QuitApp::Yes);
                         }
@@ -74,11 +74,7 @@ pub fn handle_station_keys(
                 app.input.cursor += 1;
             }
         }
-        Up => {
-            if app.input.selected > 0 {
-                app.input.selected -= 1;
-            }
-        }
+        // Something missing....
         Down => {
             if app.input.selected + 1 < app.input.suggestions.len() {
                 app.input.selected += 1;
@@ -98,8 +94,8 @@ pub fn handle_station_keys(
 mod tests {
     use super::{QuitApp, handle_station_keys};
     use crate::app::{App, AppConfig, CONFIG_PATH, Mode};
-    use sncf::Place;
     use crossterm::event::KeyCode;
+    use sncf::Place;
     use std::path::PathBuf;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -118,8 +114,10 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let temp = std::env::temp_dir()
-                .join(format!("async_rust_tui_test_{nanos}_{}", std::process::id()));
+            let temp = std::env::temp_dir().join(format!(
+                "async_rust_tui_test_{nanos}_{}",
+                std::process::id()
+            ));
             std::fs::create_dir_all(&temp)?;
             std::env::set_current_dir(&temp)?;
             Ok(Self { original, temp })
