@@ -1231,6 +1231,334 @@ let json = serde_json::to_string(&place)?;
           </div>
         </section>
 
+        <!-- ======================== -->
+        <!-- BLOC 4 :  Config and TUI
+        <!-- ======================== -->
+        <section>
+          <h3>Part 4 - Config and TUI</h3>
+          <img
+            src="images/part04.jpg"
+            alt="Api wrapping and dependency inversion"
+            width="80%"
+          />
+        </section>
+
+        <section>
+          <h3>Part 4 — Config and TUI</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                <strong>Goal</strong>: configure the application with
+                <strong>start</strong> and
+                <strong>destination</strong> stations.
+              </li>
+
+              <li>
+                Configuration is persisted in
+                <strong><code>config.toml</code></strong
+                >.
+              </li>
+
+              <li>
+                Startup logic:
+                <ul>
+                  <li>
+                    <strong>No config file</strong>:
+                    <ul>
+                      <li>launch the TUI station picker,</li>
+                      <li>
+                        we cannot start the refresh task yet (stations are
+                        unknown),
+                      </li>
+                      <li>
+                        save the selected stations to <code>config.toml</code>.
+                      </li>
+                    </ul>
+                  </li>
+
+                  <li>
+                    <strong>Config file exists</strong>:
+                    <ul>
+                      <li>
+                        for now we still show the same screen (simpler flow),
+                      </li>
+                      <li>but we also start the background refresh task,</li>
+                      <li>
+                        it should periodically emit messages in the
+                        <strong>logs</strong>.
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                This is the first step toward a full TUI dashboard:
+                <ul>
+                  <li>configuration screen → then live data screen.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <h3>Part 4 — Crates: Ratatui & Crossterm</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                <strong>Ratatui</strong>
+                <ul>
+                  <li>
+                    a Rust library to build rich
+                    <strong>terminal user interfaces</strong> (TUIs)
+                  </li>
+                  <li>
+                    widgets: <code>Block</code>, <code>Paragraph</code>,
+                    <code>List</code>, <code>Table</code>, etc.
+                  </li>
+                  <li>
+                    layout system to split the screen and render components
+                  </li>
+                  <li>
+                    render loop friendly: draw the UI repeatedly from the
+                    current state
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                <strong>Crossterm</strong>
+                <ul>
+                  <li>cross-platform terminal control and input</li>
+                  <li>
+                    keyboard events, mouse events (optional), terminal resize
+                  </li>
+                  <li>
+                    enables TUI mode:
+                    <ul>
+                      <li><strong>raw mode</strong> (no line buffering)</li>
+                      <li>
+                        <strong>alternate screen</strong> (clean full-screen UI)
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                How they work together:
+                <ul>
+                  <li>Crossterm handles terminal + events</li>
+                  <li>Ratatui renders widgets into a terminal backend</li>
+                  <li>
+                    we must always <strong>restore</strong> the terminal on exit
+                    (even on panic)
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <h3>Part 4 — Raw mode & alternate screen</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                <strong>Raw mode</strong>
+                <ul>
+                  <li>disables the terminal’s default line buffering</li>
+                  <li>
+                    key presses are sent immediately to the application (no need
+                    to press Enter)
+                  </li>
+                  <li>
+                    special keys are exposed as events (<code>Up</code>,
+                    <code>Down</code>, <code>Esc</code>, etc.)
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                What changes compared to normal mode:
+                <ul>
+                  <li>no automatic echo of typed characters</li>
+                  <li>no terminal-side editing (backspace, arrows, etc.)</li>
+                  <li>
+                    the application is fully responsible for input handling
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                <strong>Alternate screen</strong>
+                <ul>
+                  <li>switches to a separate, temporary screen buffer</li>
+                  <li>the original terminal content is preserved</li>
+                  <li>
+                    on exit, the previous screen is restored automatically
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                Why both are important for TUIs:
+                <ul>
+                  <li>raw mode enables responsive, interactive input</li>
+                  <li>alternate screen provides a clean full-screen UI</li>
+                  <li>
+                    together, they allow building apps that behave like native
+                    tools
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                <strong>Note</strong>:
+                <ul>
+                  <li>
+                    stdout / stderr output (<code>println!</code>,
+                    <code>eprintln!</code>) will not work properly anymore,
+                  </li>
+                  <li>
+                    use logging to a file instead (e.g. <code>tracing</code>).
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <h3>Part 4 — Modular TUI structure (MVP)</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                The TUI code is split into small modules to stay maintainable:
+                <ul>
+                  <li>
+                    <code>app.rs</code> — application state and update logic
+                  </li>
+                  <li><code>ui.rs</code> — rendering (widgets + layout)</li>
+                  <li><code>event.rs</code> — input/events handling</li>
+                </ul>
+              </li>
+
+              <li>
+                This matches an <strong>MVP-like</strong> architecture:
+                <ul>
+                  <li>
+                    <strong>Model</strong>: app state (<code>app.rs</code>)
+                  </li>
+                  <li>
+                    <strong>View</strong>: terminal UI (<code>ui.rs</code>)
+                  </li>
+                  <li>
+                    <strong>Presenter</strong>: event loop + updates
+                    (<code>event.rs</code>)
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                Benefits:
+                <ul>
+                  <li>clear separation of concerns,</li>
+                  <li>easier to test and reason about,</li>
+                  <li>UI can evolve without rewriting everything.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+        <section>
+          <h3>Part 4 — Snapshot testing with insta</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                <strong>insta</strong> is a snapshot testing library for Rust.
+                <ul>
+                  <li>captures the output of a function,</li>
+                  <li>stores it as a snapshot,</li>
+                  <li>compares future runs against it.</li>
+                </ul>
+              </li>
+
+              <li>
+                Why snapshot testing fits TUIs well:
+                <ul>
+                  <li>TUIs are hard to test with traditional assertions,</li>
+                  <li>the rendered output is mostly text-based,</li>
+                  <li>snapshots make visual regressions easy to spot.</li>
+                </ul>
+              </li>
+
+              <li>
+                In this project:
+                <ul>
+                  <li>we snapshot the input screen rendering,</li>
+                  <li>without starting a real terminal,</li>
+                  <li>by testing the UI logic in isolation.</li>
+                </ul>
+              </li>
+
+              <li>
+                Workflow:
+                <ul>
+                  <li>run tests → snapshot is created or compared,</li>
+                  <li>review changes explicitly when the UI evolves,</li>
+                  <li>accept updates when they are intentional.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <h3>Part 4 — What to do in this step</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                Run the tests with <code>cargo test</code> and fix failures.
+              </li>
+
+              <li>
+                But this part includes <strong>a lot of code changes</strong>:
+                <ul>
+                  <li>
+                    the most important goal is to
+                    <strong>understand the structure</strong> and
+                    <strong>play with the code</strong>
+                  </li>
+                  <li>
+                    don’t hesitate to explore:
+                    <ul>
+                      <li>change a widget,</li>
+                      <li>tweak navigation,</li>
+                      <li>inspect logs and state updates.</li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                Please ask questions!
+                <ul>
+                  <li>
+                    if something is unclear, stop and ask — we will explain it
+                    together
+                  </li>
+                  <li>
+                    the goal is to learn the patterns, not to “speedrun” the
+                    commit
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
         <section>
           <h3>Introduction to Bevy Scheduler</h3>
           <div class="lots_of_items">
