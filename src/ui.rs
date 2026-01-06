@@ -3,6 +3,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+
 pub fn draw_input(f: &mut ratatui::Frame, app: &App) {
     let area = f.area();
     let chunks = Layout::default()
@@ -59,8 +60,8 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 mod tests {
     use super::draw_input;
     use crate::app::{App, InputState, Mode};
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use sncf::Place;
     use sncf::client::ReqwestClient;
     use std::time::Instant;
