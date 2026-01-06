@@ -4,16 +4,10 @@ mod ui;
 
 use crate::app::{App, Mode};
 use crate::events::{QuitApp, handle_keys};
+use crossterm::event;
 use crossterm::event::Event;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use crossterm::{ExecutableCommand, event};
 use ratatui::{Terminal, prelude::CrosstermBackend};
-use std::{
-    io::{self, Write, stdout},
-    time::Duration,
-};
+use std::{io, time::Duration};
 use tokio::sync::mpsc::error;
 use tokio::time::Instant;
 
@@ -62,15 +56,6 @@ pub async fn run(
             }
         }
 
-        // // tick for a short wait and handle key input
-        // let _ = tick.tick().await;
-        // if event::poll(Duration::from_millis(0))?
-        //     && let Event::Key(key) = event::read()?
-        //     && let Some(value) = handle_keys(&mut app, key).await
-        // {
-        //     return value;
-        // }
-
         // Handle input events
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)?
@@ -104,24 +89,6 @@ fn refresh_task_result_to_err(res: Result<(), tokio::task::JoinError>) -> anyhow
             ))
         }
     }
-}
-
-pub fn exit_gui(
-    mut terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
-) -> Result<(), anyhow::Error> {
-    disable_raw_mode()?;
-    ExecutableCommand::execute(&mut stdout(), LeaveAlternateScreen)?;
-    stdout().flush()?;
-    terminal.show_cursor()?;
-    Ok(())
-}
-
-pub fn start_gui() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, anyhow::Error> {
-    ExecutableCommand::execute(&mut stdout(), EnterAlternateScreen)?;
-    enable_raw_mode()?;
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    terminal.hide_cursor()?;
-    Ok(terminal)
 }
 
 #[cfg(test)]
