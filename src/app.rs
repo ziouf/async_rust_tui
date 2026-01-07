@@ -1,5 +1,8 @@
+use jiff::{Unit, Zoned};
 use ratatui::widgets::ListItem;
+use sncf::{Journey, fetch_journeys};
 use sncf::{client::ReqwestClient, fetch_places};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -21,6 +24,7 @@ pub struct AppConfig {
 pub enum Mode {
     InputStart,
     InputDest,
+    Timer,
 }
 
 pub struct InputState {
@@ -34,16 +38,35 @@ pub struct InputState {
     pub error: Option<String>,
 }
 
+pub struct TimerState {
+    pub start: Instant,
+    pub duration: Duration,
+    pub notified: bool,
+    pub zero_at: Option<Instant>,
+}
+
+#[derive(Clone)]
+struct JourneyKey {
+    dep: Zoned,
+    arr: Zoned,
+    duration_secs: i64,
+    nb_transfers: i64,
+}
+
 pub struct App {
     pub mode: Mode,
     pub input: InputState,
-    pub client: ReqwestClient,
+    pub timer: TimerState,
+    pub client: Arc<ReqwestClient>,
     pub api_key: String,
     pub refresh_task: Option<JoinHandle<()>>,
-    pub data_receiver: Option<mpsc::Receiver<String>>,
+    pub data_receiver: Option<mpsc::Receiver<Vec<Journey>>>,
     pub chosen_start: Option<Place>,
     pub chosen_dest: Option<Place>,
     pub config: Option<AppConfig>,
+    pub journeys: Vec<Journey>,
+    pub journeys_selected: usize,
+    pub journeys_loading: bool,
 }
 
 pub const CONFIG_PATH: &str = "config.toml";
@@ -52,10 +75,14 @@ pub const MIN_QUERY_LEN: usize = 2;
 
 impl App {
     pub fn new(api_key: String) -> anyhow::Result<Self> {
-        let client = sncf::client::ReqwestClient::new();
+        let client = Arc::new(sncf::client::ReqwestClient::new());
         let loaded = load_config();
         Ok(Self {
-            mode: Mode::InputStart,
+            mode: if loaded.is_some() {
+                Mode::Timer
+            } else {
+                Mode::InputStart
+            },
             input: InputState {
                 text: String::new(),
                 cursor: 0,
@@ -65,6 +92,12 @@ impl App {
                 last_queried: String::new(),
                 loading: false,
                 error: None,
+            },
+            timer: TimerState {
+                start: Instant::now(),
+                duration: Duration::new(3600, 0),
+                notified: false,
+                zero_at: None,
             },
             client,
             api_key,
@@ -81,6 +114,9 @@ impl App {
                 embedded_type: Some("stop_area".into()),
             }),
             config: loaded,
+            journeys: vec![],
+            journeys_selected: 0,
+            journeys_loading: true,
         })
     }
 
@@ -88,6 +124,7 @@ impl App {
         match self.mode {
             Mode::InputStart => "Start station",
             Mode::InputDest => "Destination station",
+            Mode::Timer => "",
         }
     }
 
@@ -114,7 +151,7 @@ impl App {
         {
             self.input.loading = true;
             let query = self.input.text.clone();
-            match fetch_places(&self.client, &self.api_key, &query).await {
+            match fetch_places(&*self.client, &self.api_key, &query).await {
                 Ok(list) => {
                     self.input.suggestions = list;
                     self.input.selected = 0;
@@ -138,27 +175,32 @@ impl App {
         self.input.error = None;
     }
 
-    pub fn start_refresh_task(&mut self) {
+    pub async fn start_refresh_task(&mut self) {
         if self.config.is_none() || self.refresh_task.is_some() {
             tracing::info!("No configuration available.");
             return;
         }
 
         tracing::info!("Configuration available.");
-        let (data_sender, data_receiver) = mpsc::channel::<String>(5);
+        let (data_sender, data_receiver) = mpsc::channel::<Vec<Journey>>(5);
+        let client = self.client.clone();
+        let api_key = self.api_key.clone();
+        let config = self.config.clone().expect("Config must be available");
+        let start_id = config.start.id;
+        let destination_id = config.destination.id;
         let refresh_task = tokio::spawn(async move {
-            let mut count = 0;
             tracing::info!("refresh task started");
 
             loop {
                 tracing::info!("sending data");
-                let msg = format!("Hello {count}");
+                let msg = fetch_journeys(&*client, &api_key, &start_id, &destination_id)
+                    .await
+                    .unwrap();
                 if let Err(e) = data_sender.send(msg).await {
                     tracing::error!("Error sending message: {e}");
                     break;
                 }
-                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-                count += 1;
+                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
             }
 
             tracing::error!("refresh task terminated");
@@ -166,6 +208,77 @@ impl App {
 
         self.refresh_task = Some(refresh_task);
         self.data_receiver = Some(data_receiver);
+    }
+
+    pub fn remaining_time(&self, elapsed: Duration) -> Duration {
+        if elapsed >= self.timer.duration {
+            Duration::from_secs(0)
+        } else {
+            self.timer.duration - elapsed
+        }
+    }
+
+    pub fn update_timer_from_selection(&mut self) {
+        if self.journeys.is_empty() {
+            return;
+        }
+        let sel = self.journeys_selected.min(self.journeys.len() - 1);
+        let dep = self.journeys[sel].dep.clone();
+        let now = Zoned::now();
+        let mut secs = match now.until(&dep) {
+            Ok(span) => span.total(Unit::Second).unwrap() as i64,
+
+            Err(_) => 0,
+        };
+        if secs < 0 {
+            secs = 0;
+        }
+        self.timer.start = Instant::now();
+        self.timer.duration = Duration::from_secs(secs as u64);
+        self.timer.notified = false;
+        self.timer.zero_at = None;
+    }
+
+    pub fn replace_journeys(&mut self, mut data: Vec<Journey>) {
+        let selected_key = self.selected_journey_key();
+        data.sort_by(|a, b| a.dep.cmp(&b.dep));
+        self.journeys = data;
+        self.journeys_loading = false;
+        if self.journeys.is_empty() {
+            self.journeys_selected = 0;
+            return;
+        }
+
+        if let Some(key) = selected_key {
+            if let Some(idx) = self.journeys.iter().position(|j| {
+                j.dep == key.dep
+                    && j.arr == key.arr
+                    && j.duration_secs == key.duration_secs
+                    && j.nb_transfers == key.nb_transfers
+            }) {
+                self.journeys_selected = idx;
+            } else {
+                self.journeys_selected = self.journeys_selected.min(self.journeys.len() - 1);
+            }
+        } else {
+            self.journeys_selected = 0;
+        }
+
+        self.update_timer_from_selection();
+    }
+
+    fn selected_journey_key(&self) -> Option<JourneyKey> {
+        if self.journeys.is_empty() {
+            return None;
+        }
+        let sel = self.journeys_selected.min(self.journeys.len() - 1);
+        let journey = &self.journeys[sel];
+        Some(JourneyKey {
+            dep: journey.dep.clone(),
+            arr: journey.arr.clone(),
+            duration_secs: journey.duration_secs,
+            nb_transfers: journey.nb_transfers,
+        })
     }
 }
 
@@ -178,4 +291,48 @@ pub fn save_config(conf: &AppConfig) -> anyhow::Result<()> {
     let data = toml::to_string_pretty(conf)?;
     std::fs::write(CONFIG_PATH, data)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{App, Journey};
+    use sncf::parse_sncf_dt;
+    use std::time::Duration;
+
+    fn make_journey(dep: &str, arr: &str) -> Journey {
+        Journey {
+            dep: parse_sncf_dt(dep).expect("dep parse failed"),
+            arr: parse_sncf_dt(arr).expect("arr parse failed"),
+            date_str: "2026-01-03".to_string(),
+            duration_secs: 3600,
+            nb_transfers: 0,
+        }
+    }
+
+    #[test]
+    fn replace_journeys_sorts_and_preserves_selection() {
+        let mut app = App::new("test".to_string()).expect("app init failed");
+        let j1 = make_journey("20260103T080000", "20260103T090000");
+        let j2 = make_journey("20260103T100000", "20260103T110000");
+        let j3 = make_journey("20260103T120000", "20260103T130000");
+
+        app.journeys = vec![j1.clone(), j2.clone(), j3.clone()];
+        app.journeys_selected = 2;
+
+        app.replace_journeys(vec![j3.clone(), j1.clone(), j2.clone()]);
+
+        assert!(app.journeys.windows(2).all(|w| w[0].dep <= w[1].dep));
+        let selected = &app.journeys[app.journeys_selected];
+        assert_eq!(selected.dep, j3.dep);
+        assert_eq!(selected.arr, j3.arr);
+    }
+
+    #[test]
+    fn remaining_time_never_negative() {
+        let mut app = App::new("test".to_string()).expect("app init failed");
+        app.timer.duration = Duration::from_secs(5);
+
+        let remaining = app.remaining_time(Duration::from_secs(10));
+        assert_eq!(remaining, Duration::from_secs(0));
+    }
 }

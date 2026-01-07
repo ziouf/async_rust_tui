@@ -6,6 +6,7 @@ use crate::app::{App, Mode};
 use crate::events::{QuitApp, handle_keys};
 use crossterm::event;
 use crossterm::event::Event;
+use notify_rust::{Hint, Notification, Timeout, Urgency};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{io, time::Duration};
 use tokio::sync::mpsc::error;
@@ -19,7 +20,7 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     let mut app = App::new(api_key)?;
     // We start the external task here if we have a config defined.
-    app.start_refresh_task();
+    app.start_refresh_task().await;
 
     // Following loop simulate the TUI main loop.
     let tick_rate = Duration::from_millis(120);
@@ -40,18 +41,44 @@ pub async fn run(
                 Err(error::TryRecvError::Disconnected) => {}
                 Ok(data) => {
                     tracing::info!("data received");
-                    tracing::debug!("Data: {data}");
+                    tracing::debug!("Data: {data:?}");
+                    app.replace_journeys(data);
                 }
             };
         }
 
         terminal.draw(|f| match app.mode {
             Mode::InputStart | Mode::InputDest => ui::draw_input(f, &app),
+            Mode::Timer => ui::draw_timer(f, &app),
         })?;
 
         match app.mode {
             Mode::InputStart | Mode::InputDest => {
                 app.maybe_fetch_suggestions().await;
+            }
+            Mode::Timer => {
+                // After reaching zero, send notification once
+                let elapsed = app.timer.start.elapsed();
+                let remaining = app.remaining_time(elapsed);
+                if remaining.is_zero() && !app.timer.notified {
+                    let _ = tokio::task::spawn_blocking(|| {
+                        Notification::new()
+                            .summary("Timer finished")
+                            .body("Train is leaving.")
+                            .icon("dialog-information")
+                            .appname(APPNAME)
+                            .timeout(Timeout::Never)
+                            .hint(Hint::Resident(true))
+                            .hint(Hint::Transient(false))
+                            .hint(Hint::Urgency(Urgency::Normal))
+                            .hint(Hint::SoundName("complete".to_owned()))
+                            .hint(Hint::SuppressSound(false))
+                            .show()
+                    })
+                    .await;
+                    app.timer.notified = true;
+                    app.timer.zero_at = Some(std::time::Instant::now());
+                }
             }
         }
 

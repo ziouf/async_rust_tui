@@ -13,6 +13,7 @@ pub(crate) enum QuitApp {
 pub async fn handle_keys(app: &mut App, key: event::KeyEvent) -> Result<QuitApp, anyhow::Error> {
     match app.mode {
         Mode::InputStart | Mode::InputDest => handle_station_keys(app, key.code),
+        Mode::Timer => handle_timer_keys(app, key.code),
     }
 }
 
@@ -54,6 +55,9 @@ pub fn handle_station_keys(
                             return Ok(QuitApp::Yes);
                         }
                     }
+                    Mode::Timer => {
+                        unreachable!("We should never go at this point.")
+                    }
                 }
             }
         }
@@ -94,12 +98,37 @@ pub fn handle_station_keys(
     Ok(QuitApp::No)
 }
 
+pub fn handle_timer_keys(
+    app: &mut App,
+    code: crossterm::event::KeyCode,
+) -> Result<QuitApp, anyhow::Error> {
+    use crossterm::event::KeyCode::*;
+    match code {
+        Char('q') | Esc => return Ok(QuitApp::Yes),
+        Up => {
+            if app.journeys_selected > 0 {
+                app.journeys_selected -= 1;
+                app.update_timer_from_selection();
+            }
+        }
+        Down => {
+            if app.journeys_selected + 1 < app.journeys.len() {
+                app.journeys_selected += 1;
+                app.update_timer_from_selection();
+            }
+        }
+        Enter => app.update_timer_from_selection(),
+        _ => {}
+    }
+    Ok(QuitApp::No)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{QuitApp, handle_station_keys};
+    use super::{QuitApp, handle_station_keys, handle_timer_keys};
     use crate::app::{App, AppConfig, CONFIG_PATH, Mode};
-    use sncf::Place;
     use crossterm::event::KeyCode;
+    use sncf::Place;
     use std::path::PathBuf;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -118,8 +147,10 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let temp = std::env::temp_dir()
-                .join(format!("async_rust_tui_test_{nanos}_{}", std::process::id()));
+            let temp = std::env::temp_dir().join(format!(
+                "async_rust_tui_test_{nanos}_{}",
+                std::process::id()
+            ));
             std::fs::create_dir_all(&temp)?;
             std::env::set_current_dir(&temp)?;
             Ok(Self { original, temp })
@@ -206,5 +237,25 @@ mod tests {
 
         handle_station_keys(&mut app, KeyCode::Up).expect("up should clamp");
         assert_eq!(app.input.selected, 0);
+    }
+
+    #[test]
+    fn empty_journeys_list_keeps_selection() {
+        let mut app = App::new("test".to_string()).expect("app init failed");
+        app.mode = Mode::Timer;
+        app.journeys = vec![];
+        app.journeys_selected = 0;
+
+        let exit = handle_timer_keys(&mut app, KeyCode::Down).expect("down should work");
+        assert_eq!(exit, QuitApp::No);
+        assert_eq!(app.journeys_selected, 0);
+
+        let exit = handle_timer_keys(&mut app, KeyCode::Up).expect("up should work");
+        assert_eq!(exit, QuitApp::No);
+        assert_eq!(app.journeys_selected, 0);
+
+        let exit = handle_timer_keys(&mut app, KeyCode::Enter).expect("enter should work");
+        assert_eq!(exit, QuitApp::No);
+        assert_eq!(app.journeys_selected, 0);
     }
 }
