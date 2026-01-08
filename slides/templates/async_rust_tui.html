@@ -6,8 +6,7 @@
     <title>Async Rust and TUI</title>
 
     <meta name="description" content="Async Rust and TUI" />
-    <meta name="author" content="Cyril Marin" />
-    <meta name="author" content="René Ribaud" />
+    <meta name="author" content="Cyril Marin, René Ribaud" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
@@ -257,7 +256,7 @@
         </section>
 
         <section>
-          <h3>2 words about us 1/2</h3>
+          <h3>A few words about us 1/2</h3>
           <div class="left_text_bio">
             <ul>
               <li>Stats</li>
@@ -295,7 +294,7 @@
         </section>
 
         <section>
-          <h3>2 words about us 2/2</h3>
+          <h3>A few words about us 2/2</h3>
           <div class="left_text_bio">
             <!-- <pre class="bio"> -->
             <ul>
@@ -328,6 +327,56 @@
           </div>
           <div class="pic">
             <img src="images/uggla.png" alt="René" width="53%" />
+          </div>
+        </section>
+
+        <section>
+          <h3>Disclaimer & quick poll</h3>
+          <div class="lots_of_items2">
+            <ul>
+              <li>
+                This session is labeled as <strong>intermediate</strong>.
+                <ul>
+                  <li>
+                    If you missed it, no worries — it happens quite often 🙂
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                To adapt the pace and the level of details, let’s do a quick
+                poll:
+                <ul>
+                  <li>
+                    What is your Rust experience?
+                    <ul>
+                      <li>new to Rust / beginner</li>
+                      <li>some Rust experience</li>
+                      <li>comfortable with Rust</li>
+                    </ul>
+                  </li>
+
+                  <li>
+                    What is your main background?
+                    <ul>
+                      <li>low-level (C / C++)</li>
+                      <li>systems / backend (Rust, Go, Java, etc.)</li>
+                      <li>high-level (Python, JavaScript, etc.)</li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+
+              <li>
+                Based on this:
+                <ul>
+                  <li>
+                    we may go through some <strong>optional slides</strong>,
+                  </li>
+                  <li>or skip them if everyone is already comfortable.</li>
+                </ul>
+              </li>
+            </ul>
           </div>
         </section>
 
@@ -457,23 +506,43 @@
               <li>
                 Goals of the Workshop:
                 <ul>
-                  <li>To update with screenshot, number of part.</li>
-                  <li>30mn parts, tests to validate</li>
+                  <li>
+                    Structure a
+                    <strong>small and near-realistic Rust project</strong>
+                  </li>
+                  <li>
+                    Use key crates from the ecosystem:
+                    <strong>Tokio</strong>, <strong>Reqwest</strong>,
+                    <strong>Serde</strong>, <strong>Ratatui</strong>,
+                    <strong>Anyhow</strong>, etc.
+                  </li>
+                  <li>Consume a real-time API (e.g. SNCF data)</li>
+                  <li>
+                    Handle asynchronism to refresh data
+                    <strong>without blocking the UI</strong>
+                  </li>
+                  <li>
+                    Showcase many <strong>Rust language features</strong>
+                    (ownership, borrowing, async/await, traits, error handling,
+                    etc.)
+                  </li>
                 </ul>
               </li>
+
               <li>
-                What we will build together.
+                What we will build together:
                 <ul>
                   <li>
-                    A TUI dashboard for trains departures between 2 stations
+                    A TUI dashboard for train departures between two stations
                   </li>
                 </ul>
               </li>
             </ul>
           </div>
+
           <div class="pic lots_of_items">
             <video width="100%" autoplay loop muted>
-              <source src="images/asteroids.mp4" type="video/mp4" />
+              <source src="images/async_rust_tui.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           </div>
@@ -488,30 +557,37 @@
                 <ul>
                   <li>explanation of the goal,</li>
                   <li>key concepts and points of attention.</li>
+                  <li>
+                    the full project is around
+                    <strong>~2000 lines of code</strong>, which is not something
+                    we can build from scratch during a workshop
+                  </li>
+                  <li>
+                    this explains the approach: we progressively explore and
+                    evolve an existing codebase
+                  </li>
                 </ul>
               </li>
 
               <li>
                 Then we move to the code:
                 <ul>
-                  <li>we use <code>cargo test</code> to run the test suite,</li>
+                  <li>we use <code>cargo t</code> to run the test suite,</li>
                   <li>
-                    most of the time, <strong>tests will fail</strong> and you
-                    will need to <strong>fix the code</strong>,
+                    the goal is usually to <strong>fix the code</strong>, with
+                    errors <strong>intentionally focused</strong> on the topic
+                    of the current part
                   </li>
                   <li>
-                    don’t hesitate to <strong>ask for help</strong> or request
-                    additional explanations.
+                    but fixing tests is <strong>not the main objective</strong>
                   </li>
-                </ul>
-              </li>
-
-              <li>
-                Important note:
-                <ul>
                   <li>
-                    sometimes the code is correct and
-                    <strong>the tests need to be fixed instead</strong>.
+                    the real goal is to:
+                    <ul>
+                      <li>understand the code,</li>
+                      <li>identify patterns and design choices,</li>
+                      <li>and ask questions when something is unclear.</li>
+                    </ul>
                   </li>
                 </ul>
               </li>
@@ -910,13 +986,13 @@
         </section>
 
         <!-- =============================================== -->
-        <!-- BLOC 3 :  Api wrapping and dependency inversion -->
+        <!-- BLOC 3 :  API wrapping and dependency inversion -->
         <!-- =============================================== -->
         <section>
-          <h3>Part 3 - Api wrapping and dependency inversion</h3>
+          <h3>Part 3 - API wrapping and dependency inversion</h3>
           <img
             src="images/part03.jpg"
-            alt="Api wrapping and dependency inversion"
+            alt="API wrapping and dependency inversion"
             width="80%"
           />
         </section>
@@ -1533,9 +1609,7 @@ let json = serde_json::to_string(&place)?;
           <h3>Part 4 — What to do in this step</h3>
           <div class="lots_of_items2">
             <ul>
-              <li>
-                Run the tests with <code>cargo test</code> and fix failures.
-              </li>
+              <li>Run the tests with <code>cargo t</code> and fix failures.</li>
 
               <li>
                 But this part includes <strong>a lot of code changes</strong>:
@@ -1755,9 +1829,7 @@ let json = serde_json::to_string(&place)?;
           <h3>Part 5 — What to do in this step</h3>
           <div class="lots_of_items2">
             <ul>
-              <li>
-                Run the tests with <code>cargo test</code> and fix failures.
-              </li>
+              <li>Run the tests with <code>cargo t</code> and fix failures.</li>
 
               <li>
                 This part introduces <strong>new behaviors and state</strong>:
