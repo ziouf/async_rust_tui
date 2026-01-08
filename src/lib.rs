@@ -13,7 +13,6 @@ use tokio::time::Instant;
 
 pub const APPNAME: &str = env!("CARGO_PKG_NAME");
 
-#[allow(unused)]
 pub async fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     api_key: String,
