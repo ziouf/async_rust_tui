@@ -2,7 +2,6 @@ use jiff::{Unit, Zoned};
 use ratatui::widgets::ListItem;
 use sncf::{Journey, fetch_journeys};
 use sncf::{client::ReqwestClient, fetch_places};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -57,7 +56,7 @@ pub struct App {
     pub mode: Mode,
     pub input: InputState,
     pub timer: TimerState,
-    pub client: Arc<ReqwestClient>,
+    pub client: ReqwestClient,
     pub api_key: String,
     pub refresh_task: Option<JoinHandle<()>>,
     pub data_receiver: Option<mpsc::Receiver<Vec<Journey>>>,
@@ -75,7 +74,7 @@ pub const MIN_QUERY_LEN: usize = 2;
 
 impl App {
     pub fn new(api_key: String) -> anyhow::Result<Self> {
-        let client = Arc::new(sncf::client::ReqwestClient::new());
+        let client = sncf::client::ReqwestClient::new();
         let loaded = load_config();
         Ok(Self {
             mode: if loaded.is_some() {
@@ -151,7 +150,7 @@ impl App {
         {
             self.input.loading = true;
             let query = self.input.text.clone();
-            match fetch_places(&*self.client, &self.api_key, &query).await {
+            match fetch_places(&self.client, &self.api_key, &query).await {
                 Ok(list) => {
                     self.input.suggestions = list;
                     self.input.selected = 0;
@@ -183,19 +182,20 @@ impl App {
 
         tracing::info!("Configuration available.");
         let (data_sender, data_receiver) = mpsc::channel::<Vec<Journey>>(5);
-        let client = self.client.clone();
-        let api_key = self.api_key.clone();
-        let config = self.config.clone().expect("Config must be available");
-        let start_id = config.start.id;
-        let destination_id = config.destination.id;
         let refresh_task = tokio::spawn(async move {
             tracing::info!("refresh task started");
 
             loop {
+                let config = self.config.expect("Config must be available");
                 tracing::info!("sending data");
-                let msg = fetch_journeys(&*client, &api_key, &start_id, &destination_id)
-                    .await
-                    .unwrap();
+                let msg = fetch_journeys(
+                    &self.client,
+                    &self.api_key,
+                    &config.start.id,
+                    &config.destination.id,
+                )
+                .await
+                .unwrap();
                 if let Err(e) = data_sender.send(msg).await {
                     tracing::error!("Error sending message: {e}");
                     break;
@@ -239,9 +239,9 @@ impl App {
         self.timer.zero_at = None;
     }
 
-    pub fn replace_journeys(&mut self, mut data: Vec<Journey>) {
+    pub fn replace_journeys(&mut self, data: Vec<Journey>) {
         let selected_key = self.selected_journey_key();
-        data.sort_by(|a, b| a.dep.cmp(&b.dep));
+        // Take care your date are probably not sorted.....
         self.journeys = data;
         self.journeys_loading = false;
         if self.journeys.is_empty() {

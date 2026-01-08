@@ -146,7 +146,8 @@ pub fn draw_journeys(f: &mut ratatui::Frame, app: &App, area: Rect) {
         let sel = app.journeys_selected.min(app.journeys.len() - 1);
         state.select(Some(sel));
     }
-    f.render_stateful_widget(table, area, &mut state);
+    // There might be a bug...
+    f.render_widget(table, area);
 }
 
 pub fn format_hhmmss(dur: Duration) -> String {
@@ -163,12 +164,9 @@ mod tests {
     use crate::app::{App, AppConfig, InputState, Mode, SavedPlace, TimerState};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use sncf::{Journey, Place, parse_sncf_dt};
     use sncf::client::ReqwestClient;
-    use std::{
-        sync::Arc,
-        time::{Duration, Instant},
-    };
+    use sncf::{Journey, Place, parse_sncf_dt};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn snapshot_input_start_screen() {
