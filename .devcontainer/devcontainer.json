@@ -33,8 +33,15 @@
 	},
 	"customizations": {
 		"vscode": {
-			"extensions": [],
-			"settings": {}
+			"extensions": [
+				// "Gruntfuggly.todo-tree",
+				"maattdd.gitless"
+			],
+			"settings": {
+				// "todo-tree.general.tags": ["Fix", "***DO***"],
+				// "todo-tree.general.automaticGitRefreshInterval": 0,
+				// "todo-tree.filtering.ignoreGitSubmodules": true
+			}
 		}
 	},
 	"secrets": {
