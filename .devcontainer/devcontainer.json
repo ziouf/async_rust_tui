@@ -34,6 +34,7 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
+				"rust-lang.rust-analyzer",
 				// "Gruntfuggly.todo-tree",
 				"maattdd.gitless"
 			],
