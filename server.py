@@ -19,6 +19,8 @@ HOST = os.environ.get("HOST", "localhost")
 SLIDES_DIR = "slides"
 Handler = http.server.SimpleHTTPRequestHandler
 
+class ReuseTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
 
 def check_tools():
     try:
@@ -43,7 +45,7 @@ def check_tools():
 
 
 def serve_content():
-    with socketserver.TCPServer((HOST, int(PORT)), Handler) as httpd:
+    with ReuseTCPServer((HOST, int(PORT)), Handler) as httpd:
         print("serving at http://{}:{}".format(HOST, PORT))
         httpd.serve_forever()
 
